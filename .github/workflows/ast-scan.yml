@@ -85,8 +85,8 @@ jobs:
         run: |
           FILTER='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | .[].number'
 
-          echo "Fetching baseline high/critical alerts from main..."
-          gh api --paginate "/repos/${{ github.repository }}/code-scanning/alerts?ref=main&state=open" \
+          echo "Fetching baseline high/critical alerts from ${{ github.event.pull_request.base.ref }}..."
+          gh api --paginate "/repos/${{ github.repository }}/code-scanning/alerts?ref=${{ github.event.pull_request.base.ref }}&state=open" \
             --jq "$FILTER" | sort -n -u > /tmp/base_alerts.txt
           BASE_COUNT=$(wc -l < /tmp/base_alerts.txt | tr -d ' ')
           echo "Baseline: $BASE_COUNT high/critical alerts"
