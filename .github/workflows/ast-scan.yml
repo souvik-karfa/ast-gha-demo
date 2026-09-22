@@ -24,34 +24,40 @@ jobs:
       - name: Start crAPI
         run: CRAPI_PORT=${{ env.CRAPI_PORT }} docker compose -f crapi/docker-compose.yml up -d
 
-      - name: Wait for crAPI to be ready
+      - name: Debug - wait and inspect crAPI
         run: |
-          echo "Waiting for crAPI on port ${{ env.CRAPI_PORT }}..."
           sleep 30
-          timeout 270 bash -c \
-            'until curl -sf http://localhost:${{ env.CRAPI_PORT }}/health; do echo "Not ready, retrying..."; sleep 10; done'
-          echo "crAPI is up."
+          echo "=== Docker container status ==="
+          docker ps -a
+          echo "=== Port bindings ==="
+          docker port crapi-web
+          echo "=== curl verbose on /health ==="
+          curl -v http://localhost:${{ env.CRAPI_PORT }}/health || true
+          echo "=== curl on / ==="
+          curl -v http://localhost:${{ env.CRAPI_PORT }}/ || true
+          echo "=== crapi-web logs ==="
+          docker logs crapi-web --tail 50
 
-      - name: Run AST scan
-        uses: Traceableai/ast-action/scan@v2
-        with:
-          scan_name: ${{ secrets.AST_SCAN_NAME }}
-          client_scan_token: ${{ secrets.TRACEABLE_TOKEN }}
-          traceable_server: ${{ secrets.TRACEABLE_SERVER }}
-          additional_cli_options: |
-            --openapi-spec-files specs/crapi-openapi-spec.json
-            --target-url http://localhost:${{ env.CRAPI_PORT }}
+      # - name: Run AST scan
+      #   uses: Traceableai/ast-action/scan@v2
+      #   with:
+      #     scan_name: ${{ secrets.AST_SCAN_NAME }}
+      #     client_scan_token: ${{ secrets.TRACEABLE_TOKEN }}
+      #     traceable_server: ${{ secrets.TRACEABLE_SERVER }}
+      #     additional_cli_options: |
+      #       --openapi-spec-files specs/crapi-openapi-spec.json
+      #       --target-url http://localhost:${{ env.CRAPI_PORT }}
 
-      - name: Generate SARIF report
-        uses: Traceableai/ast-action/report@v2
-        with:
-          client_scan_token: ${{ secrets.TRACEABLE_TOKEN }}
-          traceable_server: ${{ secrets.TRACEABLE_SERVER }}
-          output_format: sarif
-          additional_cli_options: '--output-file report.sarif --report-level detailed'
+      # - name: Generate SARIF report
+      #   uses: Traceableai/ast-action/report@v2
+      #   with:
+      #     client_scan_token: ${{ secrets.TRACEABLE_TOKEN }}
+      #     traceable_server: ${{ secrets.TRACEABLE_SERVER }}
+      #     output_format: sarif
+      #     additional_cli_options: '--output-file report.sarif --report-level detailed'
 
-      - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: report.sarif
-          category: traceable-ast
+      # - name: Upload SARIF to GitHub
+      #   uses: github/codeql-action/upload-sarif@v4
+      #   with:
+      #     sarif_file: report.sarif
+      #     category: traceable-ast
