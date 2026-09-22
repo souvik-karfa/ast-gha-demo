@@ -27,7 +27,8 @@ jobs:
       - name: Wait for crAPI to be ready
         run: |
           echo "Waiting for crAPI on port ${{ env.CRAPI_PORT }}..."
-          timeout 300 bash -c \
+          sleep 30
+          timeout 270 bash -c \
             'until curl -sf http://localhost:${{ env.CRAPI_PORT }}/health; do echo "Not ready, retrying..."; sleep 10; done'
           echo "crAPI is up."
 
