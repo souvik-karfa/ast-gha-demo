@@ -41,6 +41,7 @@ jobs:
           additional_cli_options: |
             --openapi-spec-files specs/crapi-openapi-spec.json
             --target-url http://localhost:${{ env.CRAPI_PORT }}
+            --auto-hook
 
       - name: Generate SARIF report
         uses: Traceableai/ast-action/report@v2
