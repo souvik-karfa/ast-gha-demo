@@ -53,6 +53,57 @@ jobs:
 
       - name: Upload SARIF to GitHub
         uses: github/codeql-action/upload-sarif@v4
+        if: always()
         with:
           sarif_file: report.sarif
           category: traceable-ast
+
+      # ── Option 1: Absolute gate — fail if ANY high/critical alerts exist on this PR
+      #    To use this instead, comment out Option 2 and uncomment this block.
+      # - name: "Security Gate: Severity Threshold"
+      #   if: github.event_name == 'pull_request'
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   run: |
+      #     echo "Querying code scanning alerts for PR #${{ github.event.pull_request.number }}..."
+      #     COUNT=$(gh api "/repos/${{ github.repository }}/code-scanning/alerts?pr=${{ github.event.pull_request.number }}&state=open" \
+      #       --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | length')
+      #     echo "High/Critical alerts on this PR: $COUNT"
+      #     if [ "$COUNT" -gt 0 ]; then
+      #       echo "::error::Found $COUNT high/critical vulnerabilities. Blocking merge."
+      #       exit 1
+      #     fi
+      #     echo "Security gate passed."
+
+      # ── Option 2: Diff gate — fail only if PR introduces NEW high/critical alerts vs main
+      #    Compares alert numbers: alerts with same rule+location get the same number
+      #    across branches. New numbers in the PR = truly new findings.
+      - name: "Security Gate: Diff vs Baseline"
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FILTER='[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")] | .[].number'
+
+          echo "Fetching baseline high/critical alerts from ${{ github.event.pull_request.base.ref }}..."
+          gh api --paginate "/repos/${{ github.repository }}/code-scanning/alerts?ref=${{ github.event.pull_request.base.ref }}&state=open" \
+            --jq "$FILTER" | sort -n -u > /tmp/base_alerts.txt
+          BASE_COUNT=$(wc -l < /tmp/base_alerts.txt | tr -d ' ')
+          echo "Baseline: $BASE_COUNT high/critical alerts"
+
+          echo "Fetching PR high/critical alerts..."
+          gh api --paginate "/repos/${{ github.repository }}/code-scanning/alerts?pr=${{ github.event.pull_request.number }}&state=open" \
+            --jq "$FILTER" | sort -n -u > /tmp/pr_alerts.txt
+          PR_COUNT=$(wc -l < /tmp/pr_alerts.txt | tr -d ' ')
+          echo "PR: $PR_COUNT high/critical alerts"
+
+          NEW_COUNT=$(comm -23 /tmp/pr_alerts.txt /tmp/base_alerts.txt | wc -l | tr -d ' ')
+          echo "New high/critical alerts not on main: $NEW_COUNT"
+          if [ "$NEW_COUNT" -gt 0 ]; then
+            comm -23 /tmp/pr_alerts.txt /tmp/base_alerts.txt | while read -r num; do
+              echo "::error::New alert #$num — https://github.com/${{ github.repository }}/security/code-scanning/$num"
+            done
+            echo "::error::PR introduces $NEW_COUNT new high/critical vulnerabilities vs main. Blocking merge."
+            exit 1
+          fi
+          echo "Security gate passed — no new high/critical alerts."
